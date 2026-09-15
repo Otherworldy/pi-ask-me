@@ -1,4 +1,5 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { ASK_USER_QUESTION, AskParamsSchema, formatAskResult, normalizeQuestions, runQuestionnaire } from "./ask.ts";
 import { shouldAsk } from "./classify.ts";
 import { defaultConfig, type PromptConfig } from "./config.ts";
 import { guideline } from "./guideline.ts";
@@ -25,6 +26,41 @@ function lastAssistantAsked(ctx: ExtensionContext): boolean {
 export default function piPrompt(pi: ExtensionAPI) {
   const config: PromptConfig = defaultConfig();
   let forceOnce = false;
+
+  pi.registerTool({
+    name: ASK_USER_QUESTION,
+    label: "Ask User",
+    description:
+      "Ask the user 1-4 structured questions with 2-4 options each when a missing decision would change what you implement. Opens a tabbed TUI: arrow keys, Enter, Space for multiSelect, n for a note, Esc to cancel. Each option needs a label and description. Optional options[].preview markdown (single-select only) shows a side-by-side mockup. Set multiSelect when several answers are valid. Do not ask as chat text. Do not author Type something. / Other / Next — they are appended automatically. If you recommend an option, put it first and append (Recommended) to the label. Wait for the tool result before write/edit/bash. Group all clarifying questions into one call.",
+    promptSnippet: "Ask the user structured multiple-choice questions in a TUI",
+    parameters: AskParamsSchema as never,
+    executionMode: "sequential",
+    async execute(_id, params, signal, _onUpdate, ctx) {
+      const normalized = normalizeQuestions(params);
+      if (!normalized.ok) {
+        return { content: [{ type: "text" as const, text: normalized.message }] };
+      }
+      if (!ctx.hasUI) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: "Error: UI not available. Ask as chat text instead, without this tool.",
+            },
+          ],
+        };
+      }
+      if ((ctx as { mode?: string }).mode === "tui") {
+        const { runAskTui } = await import("./ask-tui.ts");
+        const tuiResult = await runAskTui(ctx, normalized.questions);
+        if (tuiResult) {
+          return { content: [{ type: "text" as const, text: formatAskResult(tuiResult) }], details: tuiResult };
+        }
+      }
+      const result = await runQuestionnaire(ctx.ui, normalized.questions, signal);
+      return { content: [{ type: "text" as const, text: formatAskResult(result) }], details: result };
+    },
+  });
 
   pi.on("before_agent_start", (event, ctx) => {
     if (!config.enabled && !forceOnce) return;
