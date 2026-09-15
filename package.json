@@ -1,0 +1,38 @@
+{
+  "name": "pi-prompt",
+  "version": "0.2.0",
+  "description": "Nudge the main agent to ask first on vague new tasks. Does not rewrite the user prompt.",
+  "type": "module",
+  "files": [
+    "src/**/*.ts",
+    "README.md"
+  ],
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-coding-agent",
+    "extension",
+    "prompt",
+    "clarify"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "smoke": "node --experimental-strip-types -e \"import('./src/index.ts').then(m=>{if(typeof m.default!=='function')throw new Error('missing default export')})\"",
+    "test": "node --experimental-strip-types --test tests/**/*.test.ts",
+    "validate": "npm run check && npm run smoke && npm test"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": ">=0.84.0"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "file:/home/Node/pi-agent-kit/node_modules/@earendil-works/pi-coding-agent",
+    "@types/node": "^24.3.0",
+    "typescript": "^5.7.3"
+  },
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  }
+}
