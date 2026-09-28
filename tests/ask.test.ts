@@ -105,6 +105,9 @@ describe("parseChoice", () => {
     assert.equal(parseChoice(labels[0], labels), 0);
     assert.equal(parseChoice("2", labels), 1);
     assert.equal(parseChoice("nope", labels), null);
+    assert.equal(parseChoice("只改 API", labels), 0);
+    const numbered = [formatOption({ label: "2周方案", description: "更快" }, 0), labels[1]];
+    assert.equal(parseChoice("2周方案", numbered), 0);
   });
 });
 

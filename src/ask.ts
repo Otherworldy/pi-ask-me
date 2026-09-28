@@ -1,8 +1,8 @@
 export const ASK_USER_QUESTION = "ask_user_question";
-export const TYPE_SOMETHING = "Type something.";
+export const TYPE_SOMETHING = "自己输入";
 export const NEXT_LABEL = "Next";
 
-const RESERVED = new Set(["other", "type something.", "next"]);
+const RESERVED = new Set(["other", "type something.", "next", TYPE_SOMETHING.toLowerCase()]);
 const MAX_QUESTIONS = 4;
 const MIN_OPTIONS = 2;
 const MAX_OPTIONS = 4;
@@ -52,7 +52,7 @@ export const AskParamsSchema = {
             description: "2-4 choices. Do not include Type something. / Other / Next — appended automatically.",
             items: {
               type: "object",
-              required: ["label", "description"],
+              required: ["label"],
               properties: {
                 label: { type: "string", maxLength: 60, description: "1-5 words. Append (Recommended) to the preferred option." },
                 description: { type: "string", description: "What this choice means or costs." },
@@ -74,10 +74,20 @@ export function formatOption(option: AskOption, index: number): string {
 }
 
 export function parseChoice(chosen: string, labels: string[]): number | null {
-  const exact = labels.indexOf(chosen);
+  const trimmed = chosen.trim();
+  const exact = labels.indexOf(trimmed);
   if (exact >= 0) return exact;
-  const i = Number.parseInt(chosen, 10) - 1;
-  return i >= 0 && i < labels.length ? i : null;
+  // 只信纯数字。`parseInt("2周")` 会把标签开头的数字当成选项序号。
+  if (/^\d+\.?$/.test(trimmed)) {
+    const i = Number.parseInt(trimmed, 10) - 1;
+    return i >= 0 && i < labels.length ? i : null;
+  }
+  const body = labels.findIndex((label) => {
+    const text = label.replace(/^\d+\.\s+/, "");
+    const head = text.split(/\s+\u2014\s+/)[0]?.trim();
+    return text.trim() === trimmed || head === trimmed;
+  });
+  return body >= 0 ? body : null;
 }
 
 export function rowCount(q: AskQuestion): number {
@@ -104,7 +114,7 @@ export function normalizeQuestions(raw: unknown): { ok: true; questions: AskQues
     for (const o of rec.options) {
       if (!o || typeof o !== "object") return { ok: false, message: "Error: invalid option" };
       const opt = o as Record<string, unknown>;
-      const label = String(opt.label ?? "").trim();
+      const label = String(opt.label ?? opt.name ?? opt.text ?? "").trim();
       if (!label) return { ok: false, message: "Error: option label required" };
       if (RESERVED.has(label.toLowerCase())) {
         return { ok: false, message: `Error: reserved label ${JSON.stringify(label)} — Type something. / Next are appended automatically` };
@@ -145,12 +155,16 @@ async function askSingle(ui: DialogUI, q: AskQuestion, header: string, signal?: 
   const chosen = await ui.select(`${header}${q.question}${previewBlock(q)}`, labels, { signal });
   if (chosen == null) return undefined;
   const idx = parseChoice(chosen, labels);
-  if (idx == null) return undefined;
+  if (idx == null) {
+    const typed = chosen.trim();
+    if (!typed) return undefined;
+    return { question: q.question, answer: typed, custom: true };
+  }
   if (idx < q.options.length) {
     const o = q.options[idx];
     return { question: q.question, answer: o.label, custom: false, ...(o.preview ? { preview: o.preview } : {}) };
   }
-  const typed = await ui.input(`${header}${q.question}\n\nType your answer:`, "", { signal });
+  const typed = await ui.input(`${header}${q.question}\n\n自己输入：`, "", { signal });
   if (typed == null) return undefined;
   return { question: q.question, answer: typed, custom: true };
 }
