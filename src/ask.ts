@@ -25,7 +25,7 @@ export type DialogUI = {
   input: (title: string, placeholder?: string, opts?: { signal?: AbortSignal }) => Promise<string | undefined>;
 };
 
-/** JSON Schema. Host TypeBox compiles this; no local typebox install. */
+/** Function parameters. A JSON string is only accepted when it is already this array. */
 export const AskParamsSchema = {
   type: "object",
   required: ["questions"],
@@ -58,7 +58,7 @@ export const AskParamsSchema = {
                 description: { type: "string", description: "What this choice means or costs." },
                 preview: {
                   type: "string",
-                  description: "Optional markdown mockup/code/diagram for side-by-side compare. Single-select only.",
+                  description: "Optional markdown mockup of this option only. Do not paste other questions or options into it.",
                 },
               },
             },
@@ -94,8 +94,38 @@ export function rowCount(q: AskQuestion): number {
   return q.options.length + 1 + (q.multiSelect ? 1 : 0);
 }
 
+function jsonArray(value: unknown): unknown[] | undefined {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== "string") return undefined;
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** GLM sometimes stringifies a parameter. Restore the array; leave prose alone so validation rejects it. */
+export function prepareAskArguments(input: unknown): unknown {
+  if (!input || typeof input !== "object") return input;
+  const args = { ...(input as Record<string, unknown>) };
+  const questions = jsonArray(args.questions);
+  if (!questions) return input;
+  args.questions = questions.map((q) => {
+    if (!q || typeof q !== "object" || Array.isArray(q)) return q;
+    const rec = { ...(q as Record<string, unknown>) };
+    const options = jsonArray(rec.options);
+    if (options) rec.options = options;
+    return rec;
+  });
+  return args;
+}
+
 export function normalizeQuestions(raw: unknown): { ok: true; questions: AskQuestion[] } | { ok: false; message: string } {
   const questions = (raw as { questions?: unknown })?.questions;
+  if (typeof questions === "string") {
+    return { ok: false, message: "Error: questions must be a function parameter array, not text" };
+  }
   if (!Array.isArray(questions) || questions.length < 1) return { ok: false, message: "Error: provide 1-4 questions" };
   if (questions.length > MAX_QUESTIONS) return { ok: false, message: `Error: at most ${MAX_QUESTIONS} questions` };
 
@@ -114,7 +144,7 @@ export function normalizeQuestions(raw: unknown): { ok: true; questions: AskQues
     for (const o of rec.options) {
       if (!o || typeof o !== "object") return { ok: false, message: "Error: invalid option" };
       const opt = o as Record<string, unknown>;
-      const label = String(opt.label ?? opt.name ?? opt.text ?? "").trim();
+      const label = String(opt.label ?? "").trim();
       if (!label) return { ok: false, message: "Error: option label required" };
       if (RESERVED.has(label.toLowerCase())) {
         return { ok: false, message: `Error: reserved label ${JSON.stringify(label)} — Type something. / Next are appended automatically` };
@@ -122,11 +152,20 @@ export function normalizeQuestions(raw: unknown): { ok: true; questions: AskQues
       const key = label.toLowerCase();
       if (seen.has(key)) return { ok: false, message: `Error: duplicate option ${JSON.stringify(label)}` };
       seen.add(key);
-      const preview = !multiSelect && typeof opt.preview === "string" && opt.preview.trim() ? opt.preview : undefined;
+      const preview = !multiSelect && typeof opt.preview === "string" && opt.preview.trim() ? opt.preview.trim() : undefined;
       options.push({ label, description: String(opt.description ?? "").trim(), ...(preview ? { preview } : {}) });
     }
     const header = typeof rec.header === "string" ? rec.header.trim().slice(0, 16) : "";
     out.push({ question, options, ...(header ? { header } : {}), ...(multiSelect ? { multiSelect: true } : {}) });
+  }
+  // A preview that contains another question is a leaked parameter, not a mockup.
+  const siblings = out.map((q) => q.question);
+  for (const q of out) {
+    for (const o of q.options) {
+      if (o.preview && siblings.some((text) => text !== q.question && text.length >= 6 && o.preview!.includes(text))) {
+        delete o.preview;
+      }
+    }
   }
   return { ok: true, questions: out };
 }

@@ -1,5 +1,5 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { ASK_USER_QUESTION, AskParamsSchema, formatAskResult, normalizeQuestions, runQuestionnaire } from "./ask.ts";
+import { ASK_USER_QUESTION, AskParamsSchema, formatAskResult, normalizeQuestions, prepareAskArguments, runQuestionnaire } from "./ask.ts";
 import { shouldAsk } from "./classify.ts";
 import { defaultConfig, type PromptConfig } from "./config.ts";
 import { guideline } from "./guideline.ts";
@@ -31,9 +31,10 @@ export default function piPrompt(pi: ExtensionAPI) {
     name: ASK_USER_QUESTION,
     label: "Ask User",
     description:
-      "Ask the user 1-4 structured questions with 2-4 options each when a missing decision would change what you implement. Opens a tabbed TUI: arrow keys, Enter, Space for multiSelect, n for a note, Esc to cancel. Each option needs a label and description. Optional options[].preview markdown (single-select only) shows a side-by-side mockup. Set multiSelect when several answers are valid. Do not ask as chat text. Do not author Type something. / Other / Next — they are appended automatically. If you recommend an option, put it first and append (Recommended) to the label. Wait for the tool result before write/edit/bash. Group all clarifying questions into one call.",
+      "Ask the user 1-4 structured questions with 2-4 options each when a missing decision would change what you implement. Pass questions as function parameters (question, header, options[].label, options[].description). Do not send the questionnaire as text. Opens a tabbed TUI: arrow keys, Enter, Space for multiSelect, n for a note, Esc to cancel. Optional options[].preview is a markdown mockup of that one option, never the other questions. Set multiSelect when several answers are valid. Do not ask as chat text. Do not author Type something. / Other / Next — they are appended automatically. If you recommend an option, put it first and append (Recommended) to the label. Wait for the tool result before write/edit/bash. Group all clarifying questions into one call.",
     promptSnippet: "Ask the user structured multiple-choice questions in a TUI",
     parameters: AskParamsSchema as never,
+    prepareArguments: prepareAskArguments,
     executionMode: "sequential",
     async execute(_id, params, signal, _onUpdate, ctx) {
       const normalized = normalizeQuestions(params);

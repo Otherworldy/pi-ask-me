@@ -5,6 +5,7 @@ import {
   formatOption,
   normalizeQuestions,
   parseChoice,
+  prepareAskArguments,
   rowCount,
   runQuestionnaire,
   TYPE_SOMETHING,
@@ -64,6 +65,32 @@ describe("normalizeQuestions", () => {
     });
     assert.equal(n.ok, false);
   });
+  it("rejects a prose blob", () => {
+    const n = normalizeQuestions({ questions: "待办队列的第一版范围？\n1. 只做用户手写" });
+    assert.equal(n.ok, false);
+  });
+  it("drops a preview that contains another question", () => {
+    const n = normalizeQuestions({
+      questions: [
+        {
+          question: "待办队列的第一版范围？",
+          options: [
+            { label: "只做手写", description: "手动开始", preview: "待办和当前聊天是不是分开的两套东西？\n是，另一条产品" },
+            { label: "加上定时", description: "到点开跑" },
+          ],
+        },
+        {
+          question: "待办和当前聊天是不是分开的两套东西？",
+          options: [
+            { label: "分开", description: "另一条产品" },
+            { label: "不分开", description: "还是这条聊天" },
+          ],
+        },
+      ],
+    });
+    assert.equal(n.ok, true);
+    if (n.ok) assert.equal(n.questions[0].options[0].preview, undefined);
+  });
   it("keeps preview on single-select and drops it on multiSelect", () => {
     const single = normalizeQuestions({
       questions: [
@@ -96,6 +123,18 @@ describe("normalizeQuestions", () => {
       assert.equal(multi.questions[0].options[0].preview, undefined);
       assert.equal(rowCount(multi.questions[0]), 4);
     }
+  });
+});
+
+describe("prepareAskArguments", () => {
+  it("restores a stringified questions array and leaves prose", () => {
+    const restored = prepareAskArguments({
+      questions: JSON.stringify([{ question: "范围？", options: "[{\"label\":\"A\"}]" }]),
+    }) as { questions: { options: unknown }[] };
+    assert.equal(restored.questions[0].question, "范围？");
+    assert.deepEqual(restored.questions[0].options, [{ label: "A" }]);
+    const prose = prepareAskArguments({ questions: "不是 json" }) as { questions: unknown };
+    assert.equal(prose.questions, "不是 json");
   });
 });
 
