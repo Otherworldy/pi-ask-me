@@ -191,6 +191,36 @@ describe("runQuestionnaire", () => {
     assert.equal(result.cancelled, true);
     assert.equal(formatAskResult(result), "User declined to answer questions");
   });
+  it("uses structured ask and does not flatten into select", async () => {
+    let selected = false;
+    const result = await runQuestionnaire(
+      {
+        select: async () => {
+          selected = true;
+          return "x";
+        },
+        input: async () => "x",
+        ask: async (questions) => {
+          assert.equal(questions[0]?.question, "范围？");
+          assert.equal(questions[0]?.options[0]?.preview, "curl");
+          return [{ question: "范围？", answer: "API", custom: false, preview: "curl" }];
+        },
+      },
+      [
+        {
+          question: "范围？",
+          options: [
+            { label: "API", description: "a", preview: "curl" },
+            { label: "UI", description: "b" },
+          ],
+        },
+      ],
+    );
+    assert.equal(selected, false);
+    assert.equal(result.cancelled, false);
+    assert.equal(result.answers[0]?.answer, "API");
+    assert.equal(result.answers[0]?.preview, "curl");
+  });
   it("parses multiSelect numbers", async () => {
     const result = await runQuestionnaire(
       { select: async () => "x", input: async () => "1,2" },

@@ -23,6 +23,8 @@ export type AskResult = { cancelled: boolean; answers: AskAnswer[]; globalNote?:
 export type DialogUI = {
   select: (title: string, options: string[], opts?: { signal?: AbortSignal }) => Promise<string | undefined>;
   input: (title: string, placeholder?: string, opts?: { signal?: AbortSignal }) => Promise<string | undefined>;
+  /** GUI 宿主直接收工具参数。没有这个方法时才退回 select/input 文本。 */
+  ask?: (questions: AskQuestion[], opts?: { signal?: AbortSignal }) => Promise<AskAnswer[] | undefined>;
 };
 
 /** Function parameters. A JSON string is only accepted when it is already this array. */
@@ -178,6 +180,11 @@ function previewBlock(q: AskQuestion): string {
 }
 
 export async function runQuestionnaire(ui: DialogUI, questions: AskQuestion[], signal?: AbortSignal): Promise<AskResult> {
+  if (ui.ask) {
+    const answers = await ui.ask(questions, { signal });
+    if (!answers) return { cancelled: true, answers: [] };
+    return { cancelled: false, answers };
+  }
   const answers: AskAnswer[] = [];
   for (const q of questions) {
     const header = q.header ? `[${q.header}] ` : "";
